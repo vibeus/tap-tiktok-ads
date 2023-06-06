@@ -61,7 +61,13 @@ AUCTION_FIELDS = """[
     "tt_app_name",
     "mobile_app_id",
     "promotion_type",
-    "dpa_target_audience_type"
+    "dpa_target_audience_type",
+    "complete_payment",
+    "cost_per_complete_payment",
+    "complete_payment_rate",
+    "total_complete_payment_rate",
+    "value_per_complete_payment",
+    "complete_payment_roas"
 ]"""
 AUDIENCE_FIELDS = """[
     "ad_name",
@@ -191,7 +197,7 @@ def transform_advertisers_records(records, bookmark_value):
 
 def get_bookmark_value(stream_name, bookmark_data, advertiser_id):
     '''
-    Returns bookmark value for any stream based on stream category(normal or stream with advertiser_id). Return None in 
+    Returns bookmark value for any stream based on stream category(normal or stream with advertiser_id). Return None in
     case of `advertisers` stream if bookmark is not present. For other streams return bookmark for each advertiser_id
     '''
     if stream_name in ENDPOINT_ADVERTISERS:

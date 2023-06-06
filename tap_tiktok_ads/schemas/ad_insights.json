@@ -341,6 +341,42 @@
         "null",
         "string"
       ]
+    },
+    "complete_payment": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "cost_per_complete_payment": {
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "complete_payment_rate": {
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "total_complete_payment_rate": {
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "value_per_complete_payment": {
+      "type": [
+        "null",
+        "number"
+      ]
+    },
+    "complete_payment_roas": {
+      "type": [
+        "null",
+        "number"
+      ]
     }
   }
 }
