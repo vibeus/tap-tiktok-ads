@@ -253,14 +253,14 @@ class Stream():
     # Each API call to TikTok with a stat_time_day dimension only support a range
     # of 30 days. Because of this we need to separate the interval between start_date
     # and end_date into batches of 30 days max.
-    def get_date_batches(self, stream_id, advertiser_id):
+    def get_date_batches(self, stream_id, advertiser_id, lookback=0):
         """
             Returns batches with start_date and end_date for the date_windowing using bookmark/start_date
         """
         if ('bookmarks' in self.state) and (stream_id in self.state['bookmarks'] and (str(advertiser_id) in self.state['bookmarks'][stream_id])):
-            start_date = parse(self.state['bookmarks'][stream_id][str(advertiser_id)])
+            start_date = parse(self.state['bookmarks'][stream_id][str(advertiser_id)]) - timedelta(days=lookback)
         else:
-            start_date = parse(self.config['start_date'])
+            start_date = parse(self.config['start_date']) - timedelta(days=lookback)
 
         if 'end_date' in self.config:
             end_date = parse(self.config['end_date'])
@@ -380,7 +380,7 @@ class Insights(Stream):
             advertiser_ids = self.config['accounts']
             for advertiser_id in advertiser_ids:
                 self.params['advertiser_id'] = advertiser_id
-                date_batches = self.get_date_batches(stream.tap_stream_id, advertiser_id)
+                date_batches = self.get_date_batches(stream.tap_stream_id, advertiser_id, 31)
                 for date_batch in date_batches:
                     self.params['start_date'] = date_batch['start_date'].date().isoformat()
                     self.params['end_date'] = date_batch['end_date'].date().isoformat()
