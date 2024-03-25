@@ -19,8 +19,8 @@ class TiktokStartDateTest(TiktokBase):
             - Verify by primary key values, that the 2nd sync and 1st sync replicated the same records.
         """
 
-        self.first_start_date = "2020-12-01T00:00:00Z"
-        self.second_start_date = "2020-12-20T00:00:00Z"
+        self.first_start_date = "2022-04-18T00:00:00Z"
+        self.second_start_date = "2022-04-21T00:00:00Z"
         start_date_1_epoch = self.dt_to_ts(self.first_start_date)
         start_date_2_epoch = self.dt_to_ts(self.second_start_date)
 
@@ -34,7 +34,7 @@ class TiktokStartDateTest(TiktokBase):
         ### First Sync
         ##########################################################################
 
-        expected_streams = self.expected_streams() - {"ads", "advertisers", "campaigns", "adgroups"}
+        expected_streams = self.expected_streams() - self.unsupported_streams - {"campaign_insights_by_province"}
 
         conn_id_1 = connections.ensure_connection(self, original_properties=False)
         runner.run_check_mode(self, conn_id_1)
