@@ -21,15 +21,11 @@ class TiktokBase(unittest.TestCase):
 
     unsupported_streams =  {
             # as we are running tests on sandbox account, the api call fails for the following stream despite using the sandbox url
-<<<<<<< HEAD
-            "advertisers"
-=======
             "advertisers",
-            "ad_insights", 
-            "ad_insights_by_age_and_gender", 
-            "ad_insights_by_country", 
+            "ad_insights",
+            "ad_insights_by_age_and_gender",
+            "ad_insights_by_country",
             "ad_insights_by_platform"
->>>>>>> abb1705319c563d009d3d8a597544ac7a07f2282
         }
 
     def tap_name(self):
@@ -71,11 +67,7 @@ class TiktokBase(unittest.TestCase):
         """Return all the data about all the streams"""
         return {
             "advertisers": {
-<<<<<<< HEAD
-                self.PRIMARY_KEYS: {"id", "create_time"},
-=======
                 self.PRIMARY_KEYS: {"advertiser_id", "create_time"},
->>>>>>> abb1705319c563d009d3d8a597544ac7a07f2282
                 self.REPLICATION_METHOD: self.INCREMENTAL,
                 self.REPLICATION_KEYS: {"create_time"},
                 self.OBEYS_START_DATE: True
@@ -121,15 +113,12 @@ class TiktokBase(unittest.TestCase):
                 self.REPLICATION_METHOD: self.INCREMENTAL,
                 self.REPLICATION_KEYS: {"stat_time_day"},
                 self.OBEYS_START_DATE: True
-<<<<<<< HEAD
-=======
             },
             "campaign_insights_by_province": {
                 self.PRIMARY_KEYS: {"advertiser_id", "campaign_id", "stat_time_day", "province_id"},
                 self.REPLICATION_METHOD: self.INCREMENTAL,
                 self.REPLICATION_KEYS: {"stat_time_day"},
                 self.OBEYS_START_DATE: True
->>>>>>> abb1705319c563d009d3d8a597544ac7a07f2282
             }
         }
 

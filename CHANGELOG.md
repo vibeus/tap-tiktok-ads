@@ -1,8 +1,4 @@
 # Changelog
-<<<<<<< HEAD
-## 0.2.1
- * Removed Missing Schema items from `adgroups` and `campaign` stream [#15] (https://github.com/singer-io/tap-tiktok-ads/pull/15)
-=======
 
 ## 1.1.0
  * Updates for python 3.11 [#26](https://github.com/singer-io/tap-tiktok-ads/pull/26)
@@ -24,7 +20,6 @@
 
 ## 0.2.1
  * Removed Missing Schema items from `adgroups` and `campaign` stream [#15](https://github.com/singer-io/tap-tiktok-ads/pull/15)
->>>>>>> abb1705319c563d009d3d8a597544ac7a07f2282
  * Fixed Bookmarking logic
  * Fixed Compatibility with sandbox accounts
 
