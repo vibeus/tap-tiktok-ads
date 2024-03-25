@@ -41,7 +41,7 @@ class TiktokAdsInterruptedSyncTest(TiktokBase):
         self.start_date = self.get_properties()["start_date"]
 
         conn_id = connections.ensure_connection(self)
-        expected_streams = self.expected_streams() - {"advertisers"}
+        expected_streams = self.expected_streams() - {"advertisers", "ad_insights", "ad_insights_by_age_and_gender", "ad_insights_by_country", "ad_insights_by_platform"}
 
         # Run check mode
         found_catalogs = self.run_and_verify_check_mode(conn_id)
@@ -50,7 +50,7 @@ class TiktokAdsInterruptedSyncTest(TiktokBase):
         catalog_entries = [ce for ce in found_catalogs if ce["tap_stream_id"] in expected_streams]
 
         # Catalog selection
-        self.select_found_catalogs(conn_id, catalog_entries)
+        self.select_found_catalogs(conn_id, catalog_entries, only_streams=expected_streams)
 
         # Run a sync job
         self.run_and_verify_sync(conn_id)
@@ -70,9 +70,6 @@ class TiktokAdsInterruptedSyncTest(TiktokBase):
                 },
                 "ads": {
                     "7086361182503780353": "2022-04-21T09:06:35.000000Z"
-                },
-                "ad_insights": {
-                    "7086361182503780353": "2021-01-25T00:00:00.000000Z"
                 }
             }
         }

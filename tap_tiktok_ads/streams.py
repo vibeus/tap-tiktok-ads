@@ -1,5 +1,5 @@
 from datetime import timedelta, datetime, timezone
-
+import json
 import singer
 from dateutil.parser import parse
 from singer.utils import now
@@ -9,14 +9,14 @@ from tap_tiktok_ads.client import TikTokClient
 
 LOGGER = singer.get_logger()
 
-AUCTION_FIELDS = """[
+AUCTION_FIELDS = [
     "ad_name",
     "ad_text",
     "adgroup_id",
     "adgroup_name",
     "campaign_id",
     "campaign_name",
-    "placement",
+    "placement_type",
     "spend",
     "cpc",
     "cpm",
@@ -67,9 +67,17 @@ AUCTION_FIELDS = """[
     "complete_payment_rate",
     "total_complete_payment_rate",
     "value_per_complete_payment",
-    "complete_payment_roas"
-]"""
-AUDIENCE_FIELDS = """[
+    "complete_payment_roas",
+    "on_web_subscribe",
+    "on_web_add_to_wishlist",
+    "user_registration",
+    "online_consult",
+    "web_event_add_to_cart",
+    "page_content_view_events",
+    "form",
+    "page_event_search"
+]
+AUDIENCE_FIELDS = [
     "ad_name",
     "ad_text",
     "adgroup_id",
@@ -94,12 +102,36 @@ AUDIENCE_FIELDS = """[
     "real_time_result",
     "real_time_cost_per_result",
     "real_time_result_rate",
-    "tt_app_id",
-    "tt_app_name",
+    "gross_impressions",
+    "conversion_rate_v2",
+    "real_time_conversion_rate_v2",
+    "rf_campaign_type",
+    "objective_type",
+    "split_test",
+    "campaign_budget",
+    "campaign_dedicate_type"
+]
+AD_AUDIENCE_FIELDS = [
+    "ad_name",
+    "ad_text",
+    "adgroup_id",
+    "adgroup_name",
+    "campaign_id",
+    "billing_event",
+    "dpa_target_audience_type",
+    "is_smart_creative",
     "mobile_app_id",
     "promotion_type",
-    "dpa_target_audience_type"
-]"""
+    "tt_app_id",
+    "tt_app_name",
+    "opt_status",
+    "budget",
+    "smart_target",
+    "bid_strategy",
+    "bid",
+    "call_to_action",
+    "promotion_type",
+]
 ENDPOINT_ADVERTISERS = [
     'advertisers'
 ]
@@ -112,7 +144,8 @@ ENDPOINT_INSIGHTS = [
     'ad_insights',
     'ad_insights_by_age_and_gender',
     'ad_insights_by_country',
-    'ad_insights_by_platform'
+    'ad_insights_by_platform',
+    'campaign_insights_by_province'
 ]
 
 def get_date_batches(start_date, end_date):
@@ -169,6 +202,9 @@ def transform_ad_management_records(records, bookmark_value):
     """
     transformed_records = []
     for record in records:
+        # Setting the custom 'current_status' as 'ACTIVE', Tiktok does not differentiate between ACTIVE/DELETE records in response.
+        if "current_status" not in record:
+            record["current_status"] = "ACTIVE"
         if 'modify_time' not in record:
             record['modify_time'] = record['create_time']
         # In case of an adgroup request, transform 'is_comment_disabled' type from integer to boolean
@@ -195,7 +231,7 @@ def transform_advertisers_records(records, bookmark_value):
     return transformed_records
 
 
-def get_bookmark_value(stream_name, bookmark_data, advertiser_id):
+def get_bookmark_value(stream_name, bookmark_data, advertiser_id, start_date):
     '''
     Returns bookmark value for any stream based on stream category(normal or stream with advertiser_id). Return None in
     case of `advertisers` stream if bookmark is not present. For other streams return bookmark for each advertiser_id
@@ -203,11 +239,11 @@ def get_bookmark_value(stream_name, bookmark_data, advertiser_id):
     if stream_name in ENDPOINT_ADVERTISERS:
         if bookmark_data:
             return bookmark_data
-        return None
+        return start_date
     elif (stream_name in ENDPOINT_INSIGHTS or stream_name in ENDPOINT_AD_MANAGEMENT) and advertiser_id in bookmark_data:
         return bookmark_data[advertiser_id]
     else:
-        return None
+        return start_date
 
 
 class Stream():
@@ -274,13 +310,14 @@ class Stream():
         """
         bookmark_column = self.replication_keys[0] # pylint: disable=unsubscriptable-object
         bookmark_data = self.get_bookmark(stream.tap_stream_id)
-        bookmark_value = get_bookmark_value(stream.tap_stream_id, bookmark_data, advertiser_id)
+        bookmark_value = get_bookmark_value(stream.tap_stream_id, bookmark_data, advertiser_id, self.config['start_date'])
         transformed_records = pre_transform(stream.tap_stream_id, records, bookmark_value)
         sorted_records = sorted(transformed_records, key=lambda x: x[bookmark_column])
         for record in sorted_records:
             with Transformer(integer_datetime_fmt=UNIX_MILLISECONDS_INTEGER_DATETIME_PARSING) as transformer:
                 # for 'insights' stream, 'advertiser_id' is not getting populated and it is one for the Primary Keys
-                record['advertiser_id'] = advertiser_id
+                if not isinstance(record.get("advertiser_id"), str):
+                    record['advertiser_id'] = advertiser_id
                 transformed_record = transformer.transform(record, stream.schema.to_dict(),
                                                            metadata.to_map(stream.metadata))
                 # write one or more rows to the stream:
@@ -316,6 +353,27 @@ class Stream():
                 total_records = response['data']['page_info']['total_number']
                 records = records + response['data']['list']
             page = page + 1
+
+        # Exclusively query to retrieve the deleted records for streams - Ads, AdGroups and Campaigns
+        if stream.tap_stream_id in ENDPOINT_AD_MANAGEMENT and str(self.config.get('include_deleted') or "false").lower() == "true":
+            LOGGER.info(f"Fetching the deleted records for stream - {stream.tap_stream_id}")
+            deleted_records = []
+            total_records = 0
+            page = 1
+            # Add the 'filtering' query param
+            self.params['filtering'] = json.dumps({"primary_status": "STATUS_DELETE"})
+            while (len(deleted_records) < total_records) or (page == 1):
+                self.params['page'] = page
+                response = self.client.get(path=self.path, headers=headers,
+                                            params=self.params)
+                if response['message'] == 'OK':
+                    total_records = response['data']['page_info']['total_number']
+                    deleted_records = deleted_records + response['data']['list']
+                page = page + 1
+            # Setting the custom 'current_status' as 'DELETE', Tiktok does not differentiate between ACTIVE/DELETE records in response.
+            for item in deleted_records:
+                item["current_status"] = "DELETE"
+            records = records + deleted_records
         self.process_batch(stream, records, advertiser_id)
 
     def do_sync(self, stream):
@@ -330,7 +388,7 @@ class Stream():
 
 class Advertisers(Stream):
     tap_stream_id = "advertisers"
-    key_properties = ['id', 'create_time']
+    key_properties = ['advertiser_id', 'create_time']
     replication_keys  = ['create_time']
     path = "advertiser/info/"
 
@@ -342,13 +400,13 @@ class Advertisers(Stream):
         response = self.client.get(path=self.path, headers=headers,
                                      params=self.params)
         if response['message'] == 'OK':
-            records = response['data']
+            records = response['data']['list']
             self.process_batch(stream, records, None)
 
     def do_sync(self, stream):
         """ Sync data from tap source for advertisers"""
         if 'accounts' in self.config and self.req_advertiser_id:
-            self.params['advertiser_ids'] = self.config['accounts']
+            self.params['advertiser_ids'] = json.dumps(self.config['accounts'])
             self.sync_advertisers(stream)
 
 class Campaigns(Stream):
@@ -391,7 +449,7 @@ class AdInsights(Insights):
     tap_stream_id = "ad_insights"
     key_properties = ['advertiser_id', 'ad_id', 'adgroup_id', 'campaign_id', 'stat_time_day']
     replication_keys  = ['stat_time_day']
-    path = "reports/integrated/get/"
+    path = "report/integrated/get/"
     params = {
         "service_type": "AUCTION",
         "report_type": "BASIC",
@@ -400,15 +458,15 @@ class AdInsights(Insights):
             "ad_id",
             "stat_time_day"
         ]""",
-        "metrics": AUCTION_FIELDS,
-        "lifetime": "false"
+        "metrics": json.dumps(AUCTION_FIELDS),
+        "query_lifetime": "false"
     }
 
 class AdInsightsByAgeAndGender(Insights):
     tap_stream_id = "ad_insights_by_age_and_gender"
     key_properties = ['advertiser_id', 'ad_id', 'adgroup_id', 'campaign_id', 'stat_time_day', 'age', 'gender']
     replication_keys  = ['stat_time_day']
-    path = "reports/integrated/get/"
+    path = "report/integrated/get/"
     params = {
         "service_type": "AUCTION",
         "report_type": "AUDIENCE",
@@ -419,15 +477,15 @@ class AdInsightsByAgeAndGender(Insights):
             "gender",
             "stat_time_day"
         ]""",
-        "metrics": AUDIENCE_FIELDS,
-        "lifetime": "false"
+        "metrics": json.dumps(AUDIENCE_FIELDS + AD_AUDIENCE_FIELDS),
+        "query_lifetime": "false"
     }
 
 class AdInsightsByCountry(Insights):
     tap_stream_id = "ad_insights_by_country"
     key_properties = ['advertiser_id', 'ad_id', 'adgroup_id', 'campaign_id', 'stat_time_day', 'country_code']
     replication_keys  = ['stat_time_day']
-    path = "reports/integrated/get/"
+    path = "report/integrated/get/"
     params = {
         "service_type": "AUCTION",
         "report_type": "AUDIENCE",
@@ -437,15 +495,15 @@ class AdInsightsByCountry(Insights):
             "country_code",
             "stat_time_day"
         ]""",
-        "metrics": AUDIENCE_FIELDS,
-        "lifetime": "false"
+        "metrics": json.dumps(AUDIENCE_FIELDS + AD_AUDIENCE_FIELDS),
+        "query_lifetime": "false"
     }
 
 class AdInsightsByPlatform(Insights):
     tap_stream_id = "ad_insights_by_platform"
     key_properties = ['advertiser_id', 'ad_id', 'adgroup_id', 'campaign_id', 'stat_time_day', 'platform']
     replication_keys  = ['stat_time_day']
-    path = "reports/integrated/get/"
+    path = "report/integrated/get/"
     params = {
         "service_type": "AUCTION",
         "report_type": "AUDIENCE",
@@ -455,7 +513,25 @@ class AdInsightsByPlatform(Insights):
             "platform",
             "stat_time_day"
         ]""",
-        "metrics": AUDIENCE_FIELDS,
+        "metrics": json.dumps(AUDIENCE_FIELDS + AD_AUDIENCE_FIELDS),
+        "query_lifetime": "false"
+    }
+
+class CampaignInsightsByProvince(Insights):
+    tap_stream_id = "campaign_insights_by_province"
+    key_properties = ['advertiser_id', 'campaign_id', 'stat_time_day', 'province_id']
+    replication_keys  = ['stat_time_day']
+    path = "report/integrated/get/"
+    params = {
+        "service_type": "AUCTION",
+        "report_type": "AUDIENCE",
+        "data_level": "AUCTION_CAMPAIGN",
+        "dimensions": """[
+            "campaign_id",
+            "province_id",
+            "stat_time_day"
+        ]""",
+        "metrics": json.dumps(AUDIENCE_FIELDS),
         "lifetime": "false"
     }
 
@@ -467,5 +543,6 @@ STREAMS = {
     'ad_insights': AdInsights,
     'ad_insights_by_age_and_gender': AdInsightsByAgeAndGender,
     'ad_insights_by_country': AdInsightsByCountry,
-    'ad_insights_by_platform': AdInsightsByPlatform
+    'ad_insights_by_platform': AdInsightsByPlatform,
+    'campaign_insights_by_province': CampaignInsightsByProvince
 }
